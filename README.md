@@ -22,3 +22,5 @@ If you're running for a while, I recommend setting up some sort of notification.
 WEBHOOK_URL="https://discord.com/api/webhooks/my_webhook_url
 curl -H "Content-Type: application/json" -X POST -d "{\"content\": \"$total\"}" "$WEBHOOK_URL"
 ```
+
+PS: The 'parallel' bit divides up the task, but unevenly, and doesn't make sense for cases where mod > n (where n is `d x d`, e.g. for a 6x6 grid n=36). This is because it's partitioned by checking `if(mod == 0 || l_leaf != mod || m % mod == res)` where l_leaf and m range up to n, so if you try and run 100 tasks by setting mod to 100 then most of those will sit idle for a 6x6 map. I think. Smarter approach needed to parallelize this better.
