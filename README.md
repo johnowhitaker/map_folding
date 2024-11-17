@@ -15,3 +15,10 @@ You can speed this up by running it in parallel on multiple CPUs. To run:
 The parallel case on my 12-core CPU takes about 2 minutes to compute the 6x6 case, vs about 0.8s for the 5x5 version. So 8x8 might involve quite a wait!
 
 Update: I ran this for 7x7 and after ~42 hours I got the correct answer of `129950723279272`. Who will do 8x8?
+
+If you're running for a while, I recommend setting up some sort of notification. For e.g., I did
+
+```
+WEBHOOK_URL="https://discord.com/api/webhooks/my_webhook_url
+curl -H "Content-Type: application/json" -X POST -d "{\"content\": \"$total\"}" "$WEBHOOK_URL"
+```
