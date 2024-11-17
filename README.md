@@ -13,3 +13,5 @@ You can speed this up by running it in parallel on multiple CPUs. To run:
 - For parallel execution, make sure compiler optimization is on `gcc -O3 -o mf mf.c` then `chmod +x run_parallel.sh` and `./run_parallel.sh` (edit to set dimensions)
 
 The parallel case on my 12-core CPU takes about 2 minutes to compute the 6x6 case, vs about 0.8s for the 5x5 version. So 8x8 might involve quite a wait!
+
+Update: I ran this for 7x7 and after ~42 hours I got the correct answer of `129950723279272`. Who will do 8x8?
