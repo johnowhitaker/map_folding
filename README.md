@@ -32,11 +32,12 @@ Grok-4 was able to write a working CUDA version that does some computation on th
 
 No worries though! I had o3 do code review, gave some suggestions back to grok 4 and had it re-write it to be more efficient. `nvcc -O3 -o gpu_folding gpu_folding.cu -std=c++11`. CPU step on `time ./gpu_folding 6 18` was near-instant and total time was 1m24! `./gpu_folding 7 25` used up all my RAM so there are improvements to be made, but `7 23` worked and after keeping my 3090 huming for XXX I got the correct answer.
 
-Finally, I had it attempt a multi-GPU solution - UNTESTED AS OF THIS COMMIT
+Finally, I had it attempt a multi-GPU solution - which on  GPUs did `6 18` in 20s - extremely promising!
+`modal launch jupyter --gpu A10G:4 --image 'nvidia/cuda:12.8.0-devel-ubuntu22.04'` (can also use vscode instead of jupyter) to get an instance quickly for testing. 
 
 It's wild to me that AI can do this stuff.
 
-### How It Works
+### How It Works (grok 4 summary)
 
 This implementation computes the number of ways to fold an n x n sheet of stamps using a backtracking algorithm adapted from the original 1968 paper by Lunnon. The core is a depth-first search (DFS) that builds valid foldings by placing "leaves" (stamps) while ensuring folding constraints via precomputed coordinate mappings (arrays c and d).
 
