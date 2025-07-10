@@ -4,10 +4,14 @@
 #include <vector>
 #include <thread>
 #include <cuda_runtime.h>
+#include <atomic>
+#include <chrono>
+#include <iostream>
 
 typedef unsigned long long ull;
 const int MAX_N = 64;
 const int MAX_GAP = MAX_N * MAX_N + 1;
+const int BATCH_SIZE = 10000; // Adjust as needed for balance between overhead and update frequency
 
 __constant__ int bigP_const[3];
 __constant__ int c_const[3][MAX_N + 1];
@@ -209,7 +213,7 @@ __global__ void compute_counts(int grid_size, int partition_depth, int num_state
     atomicAdd(result, myCount);
 }
 
-void process_gpu(int device_id, int grid_size, int partition_depth, int start_idx, int end_idx, const std::vector<State>& states, ull& partial_result) {
+void process_gpu(int device_id, int grid_size, int partition_depth, int start_idx, int end_idx, const std::vector<State>& states, ull& partial_result, std::atomic<long long>& completed, long long total_states) {
     cudaSetDevice(device_id);
 
     int num_local_states = end_idx - start_idx;
@@ -219,47 +223,57 @@ void process_gpu(int device_id, int grid_size, int partition_depth, int start_id
     }
 
     int n = grid_size * grid_size;
+    partial_result = 0;
 
-    int *d_all_a, *d_all_b_arr, *d_all_gapter;
-    ull *d_result;
-    cudaMalloc(&d_all_a, num_local_states * (n + 1) * sizeof(int));
-    cudaMalloc(&d_all_b_arr, num_local_states * (n + 1) * sizeof(int));
-    cudaMalloc(&d_all_gapter, num_local_states * (n + 2) * sizeof(int));
-    cudaMalloc(&d_result, sizeof(ull));
+    int num_batches = (num_local_states + BATCH_SIZE - 1) / BATCH_SIZE;
 
-    int *h_all_a = new int[num_local_states * (n + 1)];
-    int *h_all_b_arr = new int[num_local_states * (n + 1)];
-    int *h_all_gapter = new int[num_local_states * (n + 2)];
+    for (int b = 0; b < num_batches; ++b) {
+        int batch_start = start_idx + b * BATCH_SIZE;
+        int batch_num = std::min(BATCH_SIZE, end_idx - batch_start);
 
-    for (int s = 0; s < num_local_states; s++) {
-        const State& state = states[start_idx + s];
-        memcpy(h_all_a + s * (n + 1), state.a, (n + 1) * sizeof(int));
-        memcpy(h_all_b_arr + s * (n + 1), state.b_arr, (n + 1) * sizeof(int));
-        memcpy(h_all_gapter + s * (n + 2), state.gapter, (n + 2) * sizeof(int));
+        int *d_all_a, *d_all_b_arr, *d_all_gapter;
+        ull *d_result;
+        cudaMalloc(&d_all_a, batch_num * (n + 1) * sizeof(int));
+        cudaMalloc(&d_all_b_arr, batch_num * (n + 1) * sizeof(int));
+        cudaMalloc(&d_all_gapter, batch_num * (n + 2) * sizeof(int));
+        cudaMalloc(&d_result, sizeof(ull));
+
+        int *h_all_a = new int[batch_num * (n + 1)];
+        int *h_all_b_arr = new int[batch_num * (n + 1)];
+        int *h_all_gapter = new int[batch_num * (n + 2)];
+
+        for (int s = 0; s < batch_num; s++) {
+            const State& state = states[batch_start + s];
+            memcpy(h_all_a + s * (n + 1), state.a, (n + 1) * sizeof(int));
+            memcpy(h_all_b_arr + s * (n + 1), state.b_arr, (n + 1) * sizeof(int));
+            memcpy(h_all_gapter + s * (n + 2), state.gapter, (n + 2) * sizeof(int));
+        }
+
+        cudaMemcpy(d_all_a, h_all_a, batch_num * (n + 1) * sizeof(int), cudaMemcpyHostToDevice);
+        cudaMemcpy(d_all_b_arr, h_all_b_arr, batch_num * (n + 1) * sizeof(int), cudaMemcpyHostToDevice);
+        cudaMemcpy(d_all_gapter, h_all_gapter, batch_num * (n + 2) * sizeof(int), cudaMemcpyHostToDevice);
+
+        ull h_result = 0;
+        cudaMemcpy(d_result, &h_result, sizeof(ull), cudaMemcpyHostToDevice);
+
+        int block_size = 256;
+        int grid_blocks = (batch_num + block_size - 1) / block_size;
+        compute_counts<<<grid_blocks, block_size>>>(grid_size, partition_depth, batch_num, d_all_a, d_all_b_arr, d_all_gapter, d_result);
+        cudaDeviceSynchronize();
+
+        cudaMemcpy(&h_result, d_result, sizeof(ull), cudaMemcpyDeviceToHost);
+        partial_result += h_result;
+
+        completed += batch_num;
+
+        delete[] h_all_a;
+        delete[] h_all_b_arr;
+        delete[] h_all_gapter;
+        cudaFree(d_all_a);
+        cudaFree(d_all_b_arr);
+        cudaFree(d_all_gapter);
+        cudaFree(d_result);
     }
-
-    cudaMemcpy(d_all_a, h_all_a, num_local_states * (n + 1) * sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_all_b_arr, h_all_b_arr, num_local_states * (n + 1) * sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_all_gapter, h_all_gapter, num_local_states * (n + 2) * sizeof(int), cudaMemcpyHostToDevice);
-
-    ull h_result = 0;
-    cudaMemcpy(d_result, &h_result, sizeof(ull), cudaMemcpyHostToDevice);
-
-    int block_size = 256;
-    int grid_blocks = (num_local_states + block_size - 1) / block_size;
-    compute_counts<<<grid_blocks, block_size>>>(grid_size, partition_depth, num_local_states, d_all_a, d_all_b_arr, d_all_gapter, d_result);
-    cudaDeviceSynchronize();
-
-    cudaMemcpy(&h_result, d_result, sizeof(ull), cudaMemcpyDeviceToHost);
-    partial_result = h_result;
-
-    delete[] h_all_a;
-    delete[] h_all_b_arr;
-    delete[] h_all_gapter;
-    cudaFree(d_all_a);
-    cudaFree(d_all_b_arr);
-    cudaFree(d_all_gapter);
-    cudaFree(d_result);
 }
 
 int main(int argc, char *argv[]) {
@@ -330,6 +344,9 @@ int main(int argc, char *argv[]) {
         cudaMemcpyToSymbol(d_const, hd, sizeof(hd));
     }
 
+    std::atomic<long long> completed(0);
+    long long total_states = num_states;
+
     std::vector<ull> partial_results(num_gpus, 0);
     std::vector<std::thread> threads;
 
@@ -341,18 +358,40 @@ int main(int argc, char *argv[]) {
         int local_num = states_per_gpu + (gpu < remainder ? 1 : 0);
         int end_idx = current_start + local_num;
 
-        threads.emplace_back([gpu, grid_size, partition_depth, current_start, end_idx, &states, &partial_results]() {
+        threads.emplace_back([gpu, grid_size, partition_depth, current_start, end_idx, &states, &partial_results, &completed, total_states]() {
             ull local_result;
-            process_gpu(gpu, grid_size, partition_depth, current_start, end_idx, states, local_result);
+            process_gpu(gpu, grid_size, partition_depth, current_start, end_idx, states, local_result, completed, total_states);
             partial_results[gpu] = local_result;
         });
 
         current_start = end_idx;
     }
 
+    auto start_time = std::chrono::steady_clock::now();
+    bool progress_started = false;
+
+    std::thread progress_thread([&completed, total_states, &start_time, &progress_started]() {
+        while (completed.load() < total_states) {
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+            auto now = std::chrono::steady_clock::now();
+            double elapsed = std::chrono::duration<double>(now - start_time).count();
+            double prog = static_cast<double>(completed.load()) / total_states;
+            static double last_prog = -1.0;
+            if (prog > 0 && prog != last_prog) {
+                double eta = (elapsed / prog) * (1 - prog);
+                std::cout << "\rProgress: " << (prog * 100) << "%, ETA: " << eta << "s" << std::flush;
+                last_prog = prog;
+            }
+        }
+        std::cout << "\rProgress: 100%, ETA: 0s" << std::endl;
+    });
+
     for (auto& t : threads) {
         t.join();
     }
+
+    completed = total_states; // Ensure progress thread exits
+    progress_thread.join();
 
     ull total_result = 0;
     for (auto res : partial_results) {
