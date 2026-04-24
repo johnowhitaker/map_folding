@@ -42,6 +42,16 @@
 *.idb
 *.pdb
 
+# Local generated artifacts
+__pycache__/
+mf
+mf_fast
+sym_fold
+gpu_folding_remote
+gpu_v2_*
+gpu_old_*
+results/
+
 # Kernel Module Compile Results
 *.mod*
 *.cmd

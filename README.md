@@ -14,7 +14,15 @@ You can speed this up by running it in parallel on multiple CPUs. To run:
 
 The parallel case on my 12-core CPU takes about 2 minutes to compute the 6x6 case, vs about 0.8s for the 5x5 version. So 8x8 might involve quite a wait!
 
-Update: I ran this for 7x7 and after ~42 hours I got the correct answer of `129950723279272`. Who will do 8x8?
+Update: I ran this for 7x7 and after ~42 hours I got the correct answer of `129950723279272`.
+
+2026-04-23 update: the symmetry-reduced Modal CPU sweep replicated the 8x8 result:
+
+```
+8x8 = 162403827553180928
+```
+
+That full run used 4,804 chunks of 50,000 depth-36 symmetry-expanded cases, completed in 9,992.25s wall time, and cost about $266.75 on Modal for the main app run.
 
 If you're running for a while, I recommend setting up some sort of notification. For e.g., I did
 
@@ -46,3 +54,37 @@ To accelerate computation on GPUs:
 Precomputation on CPU: We run the backtracking up to a user-specified partition_depth (e.g., 20-30), collecting partial states (configurations of arrays a, b_arr, and gapter at that depth). This partitions the enormous search space into independent sub-trees. For larger n, this generates millions of states quickly.
 GPU Parallelism: The partial states are transferred to GPU memory. Each GPU thread resumes backtracking from one partial state to completion, counting valid foldings (myCount += n for each complete folding). Results are atomically summed into a global counter.
 Optimizations: Large arrays (bigP, c, d) are moved to CUDA constant memory for fast, read-only access, reducing per-thread local memory (~70-80 KB savings) and boosting occupancy (10% → 60-80%). The CPU phase skips gap computation beyond the partition depth for speed.
+
+## Symmetry-reduced solver
+
+`sym_fold.cpp` is the current fastest path in this repo. It is an attributed C++ port of gsitcia's Code Golf Stack Exchange symmetry-reduced solver, using center-out spiral numbering, D4 square symmetries, and stack reversal to reduce the search space before counting.
+
+Build and run locally:
+
+```
+clang++ -O3 -march=native -std=c++20 -pthread -o sym_fold sym_fold.cpp
+./sym_fold 6 12
+./sym_fold 7 12
+```
+
+Useful 8x8 chunk/sampling mode:
+
+```
+MF_STREAM_CASES=1 MF_EXPANDED_N=36 ./sym_fold 8 12 100000 0
+```
+
+For Modal CPU chunks:
+
+```
+modal run modal_sym.py::main --n 8 --threads 16 --expanded-n 36 --start-case 0 --max-cases 100000
+```
+
+For the full replicated 8x8 sweep:
+
+```
+modal run modal_sym.py::sweep --n 8 --threads 16 --expanded-n 36 \
+  --total-cases 240192829 --chunk-size 50000 \
+  --out results/8x8-depth36-full.jsonl
+```
+
+If a sweep is interrupted, rerun with `--resume-existing` against the same output file to skip chunk starts that are already present. See `docs/8x8-method.md` for the method writeup. The experiment log in `EXPERIMENTS.md` has timings, validation details, and partial chunk results.
