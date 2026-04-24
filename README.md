@@ -87,4 +87,4 @@ modal run modal_sym.py::sweep --n 8 --threads 16 --expanded-n 36 \
   --out results/8x8-depth36-full.jsonl
 ```
 
-If a sweep is interrupted, rerun with `--resume-existing` against the same output file to skip chunk starts that are already present. See `docs/8x8-method.md` for the method writeup. The experiment log in `EXPERIMENTS.md` has timings, validation details, and partial chunk results.
+If a sweep is interrupted, rerun with `--resume-existing` against the same output file to skip chunk starts that are already present. See `docs/8x8-method.md` for the method writeup. The experiment log in `EXPERIMENTS.md` has timings, validation details, and partial chunk results. Speculative 9x9 feasibility work lives under `experiments/9x9/`.

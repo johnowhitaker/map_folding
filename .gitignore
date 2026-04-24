@@ -47,6 +47,8 @@ __pycache__/
 mf
 mf_fast
 sym_fold
+sym_fold9
+stack_dp
 gpu_folding_remote
 gpu_v2_*
 gpu_old_*
