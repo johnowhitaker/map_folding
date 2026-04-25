@@ -21,6 +21,7 @@ KNOWN_SQUARE_COUNTS = {
 class CampaignConfig:
     n: int = 5
     prefix_depth: int = 14
+    stop_depth: int | None = None
     prefixes_per_unit: int = 64
 
     @property
@@ -28,14 +29,31 @@ class CampaignConfig:
         return self.n * self.n
 
     @property
+    def effective_stop_depth(self) -> int:
+        return self.stop_depth or self.n2
+
+    @property
+    def is_full_search(self) -> bool:
+        return self.effective_stop_depth == self.n2
+
+    @property
     def factor(self) -> int:
+        if not self.is_full_search:
+            return 1
         if self.n <= 1:
             return 1
         return 2 * self.n2
 
     @property
+    def result_label(self) -> str:
+        return "Current answer sum" if self.is_full_search else "Expanded prefixes counted"
+
+    @property
     def campaign_id(self) -> str:
-        return f"raw-n{self.n}-d{self.prefix_depth}-p{self.prefixes_per_unit}-v1"
+        return (
+            f"raw-n{self.n}-d{self.prefix_depth}-s{self.effective_stop_depth}"
+            f"-p{self.prefixes_per_unit}-v2"
+        )
 
 
 def build_spiral_map(width: int, height: int) -> list[list[int]]:
@@ -158,12 +176,13 @@ def generate_prefixes(n: int, depth: int) -> list[str]:
     return prefixes
 
 
-def count_from_cycle(cycle: list[int], i: int, edges: list[list[int]], n2: int) -> int:
+def count_from_cycle(cycle: list[int], i: int, edges: list[list[int]], stop_depth: int) -> int:
+    if i == stop_depth:
+        return 1
+
     good = good_mask(cycle, i, edges)
     if good == 0:
         return 0
-    if i == n2 - 1:
-        return good.bit_count()
 
     total = 0
     while good:
@@ -173,7 +192,7 @@ def count_from_cycle(cycle: list[int], i: int, edges: list[list[int]], n2: int) 
         nxt = cycle[j]
         cycle[i] = nxt
         cycle[j] = i
-        total += count_from_cycle(cycle, i + 1, edges, n2)
+        total += count_from_cycle(cycle, i + 1, edges, stop_depth)
         cycle[j] = nxt
     return total
 
@@ -187,16 +206,16 @@ def count_prefix_raw(n: int, depth: int, prefix: str) -> int:
 def count_payload_raw(payload: dict) -> int:
     n = int(payload["n"])
     depth = int(payload["depth"])
+    stop_depth = int(payload.get("stopDepth") or n * n)
     edges = make_edges(n)
     n2 = n * n
     total = 0
     for prefix in payload["prefixes"]:
         cycle = decode_prefix(prefix, n2)
-        total += count_from_cycle(cycle, depth, edges, n2)
+        total += count_from_cycle(cycle, depth, edges, stop_depth)
     return total
 
 
 def chunked(values: list[str], size: int) -> Iterable[list[str]]:
     for i in range(0, len(values), size):
         yield values[i : i + size]
-

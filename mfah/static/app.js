@@ -4,6 +4,7 @@ const els = {
   globalBar: document.getElementById("globalBar"),
   unitCount: document.getElementById("unitCount"),
   activeClients: document.getElementById("activeClients"),
+  resultMetricLabel: document.getElementById("resultMetricLabel"),
   answerCompleted: document.getElementById("answerCompleted"),
   connectionState: document.getElementById("connectionState"),
   startButton: document.getElementById("startButton"),
@@ -18,6 +19,7 @@ const els = {
   campaignLabel: document.getElementById("campaignLabel"),
   gridSize: document.getElementById("gridSize"),
   prefixDepth: document.getElementById("prefixDepth"),
+  stopDepth: document.getElementById("stopDepth"),
   totalPrefixes: document.getElementById("totalPrefixes"),
   knownAnswer: document.getElementById("knownAnswer"),
   recentLog: document.getElementById("recentLog"),
@@ -93,6 +95,8 @@ function updateCampaign(config) {
   els.campaignLabel.textContent = `${config.n}x${config.n}`;
   els.gridSize.textContent = `${config.n} x ${config.n}`;
   els.prefixDepth.textContent = String(config.prefixDepth);
+  els.stopDepth.textContent = String(config.stopDepth || config.n2);
+  els.resultMetricLabel.textContent = config.resultLabel || "Current answer sum";
   els.knownAnswer.textContent = config.knownAnswer ? formatInteger(config.knownAnswer) : "-";
   state.latestPrefixN = config.n;
 }
@@ -236,7 +240,8 @@ class WorkerSlot {
         if (submitted.ok) {
           state.sessionUnits += 1;
           state.sessionNodes += message.nodes;
-          logLine(`#${work.workUnitId}`, `${formatInteger(submitted.answerContribution || "0")} answer contribution`);
+          const contributionLabel = state.config?.isFullSearch ? "answer contribution" : "expanded prefixes";
+          logLine(`#${work.workUnitId}`, `${formatInteger(submitted.answerContribution || "0")} ${contributionLabel}`);
           applyStats(submitted.stats);
         } else {
           logLine(`#${work.workUnitId}`, submitted.error || "rejected");
@@ -251,8 +256,12 @@ class WorkerSlot {
 }
 
 async function refreshStats() {
-  const stats = await getJson(`/api/stats?client_id=${encodeURIComponent(state.clientId)}`);
-  applyStats(stats);
+  try {
+    const stats = await getJson(`/api/stats?client_id=${encodeURIComponent(state.clientId)}`);
+    applyStats(stats);
+  } catch {
+    setConnection("error", "offline");
+  }
 }
 
 function applyStats(stats) {
@@ -266,9 +275,11 @@ function applyStats(stats) {
   els.globalBar.style.width = `${Math.max(0, Math.min(100, pct))}%`;
   els.unitCount.textContent = `${formatInteger(doneUnits)} / ${formatInteger(totalUnits)}`;
   els.activeClients.textContent = formatInteger(stats.activeClients || 0);
+  els.resultMetricLabel.textContent = stats.resultLabel || "Current answer sum";
   els.answerCompleted.textContent = formatInteger(stats.answerCompleted || "0");
   els.totalPrefixes.textContent = formatInteger(stats.totalPrefixes || 0);
   els.campaignLabel.textContent = `${stats.n}x${stats.n} | ${formatInteger(leased.units || 0)} active`;
+  els.stopDepth.textContent = String(stats.stopDepth || state.config?.stopDepth || "-");
 
   if (stats.personal) {
     els.personalUnits.textContent = formatInteger(stats.personal.units);

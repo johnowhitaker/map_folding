@@ -26,10 +26,13 @@ Useful environment variables:
 MFAH_DB=/path/to/mfah.sqlite3
 MFAH_N=5
 MFAH_PREFIX_DEPTH=14
+MFAH_STOP_DEPTH=25
 MFAH_PREFIXES_PER_UNIT=64
 MFAH_LEASE_SECONDS=300
 MFAH_VERIFY_RESULTS=0
 ```
+
+If `MFAH_STOP_DEPTH` is omitted, each worker completes the full raw search for the configured `n`. For 9x9, set a bounded stop depth; completing raw 9x9 from browser clients is not practical with this first worker.
 
 `MFAH_VERIFY_RESULTS=1` makes the server recompute submitted units before accepting them. That is useful for local testing, but defeats the purpose of donated compute. A public deployment should add redundant assignment or spot checks before trusting arbitrary clients.
 

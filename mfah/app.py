@@ -37,11 +37,22 @@ def make_app() -> Flask:
     app.config["MFAH_DB"] = os.environ.get("MFAH_DB", str(DEFAULT_DB))
     app.config["MFAH_LEASE_SECONDS"] = int(os.environ.get("MFAH_LEASE_SECONDS", "300"))
     app.config["MFAH_VERIFY_RESULTS"] = os.environ.get("MFAH_VERIFY_RESULTS", "0") == "1"
-    app.config["MFAH_CAMPAIGN"] = CampaignConfig(
-        n=int(os.environ.get("MFAH_N", "5")),
+    n = int(os.environ.get("MFAH_N", "5"))
+    stop_depth_text = os.environ.get("MFAH_STOP_DEPTH")
+    stop_depth = int(stop_depth_text) if stop_depth_text else None
+    campaign = CampaignConfig(
+        n=n,
         prefix_depth=int(os.environ.get("MFAH_PREFIX_DEPTH", "14")),
+        stop_depth=stop_depth,
         prefixes_per_unit=int(os.environ.get("MFAH_PREFIXES_PER_UNIT", "64")),
     )
+    if campaign.prefix_depth < 3 or campaign.prefix_depth > campaign.n2:
+        raise ValueError(f"MFAH_PREFIX_DEPTH must be between 3 and {campaign.n2}")
+    if campaign.effective_stop_depth < campaign.prefix_depth or campaign.effective_stop_depth > campaign.n2:
+        raise ValueError(
+            f"MFAH_STOP_DEPTH must be between {campaign.prefix_depth} and {campaign.n2}"
+        )
+    app.config["MFAH_CAMPAIGN"] = campaign
 
     with app.app_context():
         init_db(app)
@@ -60,8 +71,11 @@ def make_app() -> Flask:
                 "n": cfg.n,
                 "n2": cfg.n2,
                 "prefixDepth": cfg.prefix_depth,
+                "stopDepth": cfg.effective_stop_depth,
                 "prefixesPerUnit": cfg.prefixes_per_unit,
                 "factor": cfg.factor,
+                "isFullSearch": cfg.is_full_search,
+                "resultLabel": cfg.result_label,
                 "knownAnswer": str(KNOWN_SQUARE_COUNTS.get(cfg.n, "")),
                 "leaseSeconds": app.config["MFAH_LEASE_SECONDS"],
             }
@@ -200,7 +214,9 @@ def seed_campaign(app: Flask) -> None:
                 "unitIndex": unit_index,
                 "n": cfg.n,
                 "depth": cfg.prefix_depth,
+                "stopDepth": cfg.effective_stop_depth,
                 "factor": cfg.factor,
+                "isFullSearch": cfg.is_full_search,
                 "prefixes": batch,
             }
             rows.append(
@@ -406,6 +422,9 @@ def read_stats(app: Flask, client_id: str | None = None) -> dict[str, Any]:
         "campaign": cfg.campaign_id,
         "n": cfg.n,
         "prefixDepth": cfg.prefix_depth,
+        "stopDepth": cfg.effective_stop_depth,
+        "isFullSearch": cfg.is_full_search,
+        "resultLabel": cfg.result_label,
         "totalUnits": total_units,
         "totalPrefixes": int(totals["prefixes"] or 0),
         "status": status,

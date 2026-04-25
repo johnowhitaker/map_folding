@@ -22,8 +22,9 @@ function solvePayload(payload) {
   const n = payload.n;
   const n2 = n * n;
   const depth = payload.depth;
+  const stopDepth = payload.stopDepth || n2;
   const edges = makeEdges(n);
-  const useNumberMasks = n2 <= 30;
+  const useNumberMasks = stopDepth <= 30;
   let nodes = 0;
   let raw = 0n;
   const total = payload.prefixes.length;
@@ -36,12 +37,12 @@ function solvePayload(payload) {
     const cycle = decodePrefix(payload.prefixes[index], n2);
     const before = nodes;
     if (useNumberMasks) {
-      const counted = countNumber(cycle, depth, edges, n2, () => {
+      const counted = countNumber(cycle, depth, edges, stopDepth, () => {
         nodes += 1;
       });
       raw += BigInt(counted);
     } else {
-      const counted = countBigInt(cycle, depth, edges, n2, () => {
+      const counted = countBigInt(cycle, depth, edges, stopDepth, () => {
         nodes += 1;
       });
       raw += counted;
@@ -77,14 +78,14 @@ function decodePrefix(encoded, n2) {
   return cycle;
 }
 
-function countNumber(cycle, i, edges, n2, touch) {
+function countNumber(cycle, i, edges, stopDepth, touch) {
   touch();
+  if (i === stopDepth) {
+    return 1;
+  }
   let good = goodMaskNumber(cycle, i, edges);
   if (good === 0) {
     return 0;
-  }
-  if (i === n2 - 1) {
-    return popcountNumber(good);
   }
 
   let total = 0;
@@ -95,7 +96,7 @@ function countNumber(cycle, i, edges, n2, touch) {
     const next = cycle[j];
     cycle[i] = next;
     cycle[j] = i;
-    total += countNumber(cycle, i + 1, edges, n2, touch);
+    total += countNumber(cycle, i + 1, edges, stopDepth, touch);
     cycle[j] = next;
   }
   return total;
@@ -137,14 +138,14 @@ function popcountNumber(value) {
   return count;
 }
 
-function countBigInt(cycle, i, edges, n2, touch) {
+function countBigInt(cycle, i, edges, stopDepth, touch) {
   touch();
+  if (i === stopDepth) {
+    return 1n;
+  }
   let good = goodMaskBigInt(cycle, i, edges);
   if (good === 0n) {
     return 0n;
-  }
-  if (i === n2 - 1) {
-    return BigInt(popcountBigInt(good));
   }
 
   let total = 0n;
@@ -155,7 +156,7 @@ function countBigInt(cycle, i, edges, n2, touch) {
     const next = cycle[j];
     cycle[i] = next;
     cycle[j] = i;
-    total += countBigInt(cycle, i + 1, edges, n2, touch);
+    total += countBigInt(cycle, i + 1, edges, stopDepth, touch);
     cycle[j] = next;
   }
   return total;
