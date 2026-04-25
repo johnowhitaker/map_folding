@@ -241,7 +241,8 @@ class WorkerSlot {
           state.sessionUnits += 1;
           state.sessionNodes += message.nodes;
           const contributionLabel = state.config?.isFullSearch ? "answer contribution" : "expanded prefixes";
-          logLine(`#${work.workUnitId}`, `${formatInteger(submitted.answerContribution || "0")} ${contributionLabel}`);
+          const kernel = message.kernel ? ` (${message.kernel})` : "";
+          logLine(`#${work.workUnitId}`, `${formatInteger(submitted.answerContribution || "0")} ${contributionLabel}${kernel}`);
           applyStats(submitted.stats);
         } else {
           logLine(`#${work.workUnitId}`, submitted.error || "rejected");

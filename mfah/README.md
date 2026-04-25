@@ -39,7 +39,32 @@ If `MFAH_STOP_DEPTH` is omitted, each worker completes the full raw search for t
 Current client kernel:
 
 - Runs in Web Workers so the UI stays responsive.
-- Uses the same center-out raw cycle insertion logic as the C++ solver for the default campaign.
-- Uses fast 32-bit masks for `n <= 5` and a BigInt fallback for larger browser-side experiments.
+- Prefers `static/sym_kernel.wasm`, a tiny C/WASM build of the same center-out raw cycle insertion logic as the C++ solver.
+- Falls back to the JavaScript worker if the WASM file cannot be loaded.
+- Accepts today's raw `prefixes` payloads and a future `cases` payload shape with per-cycle multipliers, which is the format needed for symmetry-reduced 8x8/9x9 work.
 
-This is intentionally shaped as a coordinator plus replaceable client kernel. The next step for real 8x8/9x9 volunteer work is to replace the default 5x5 campaign generator with the symmetry-reduced 8x8/9x9 prefix format and swap the worker for a WASM build of that kernel.
+Build and test the WASM kernel:
+
+```
+mfah/wasm/build.sh
+node mfah/wasm/test_wasm.mjs
+```
+
+On macOS, the build script expects a clang with `wasm32` support. If the system clang is insufficient:
+
+```
+brew install llvm lld
+```
+
+The public demo can be switched to a bounded 7x7 campaign with:
+
+```
+MFAH_N=7
+MFAH_PREFIX_DEPTH=14
+MFAH_STOP_DEPTH=28
+MFAH_PREFIXES_PER_UNIT=64
+```
+
+That campaign is a smoke test for the distributed machinery, not an attempt at the 7x7 answer; it counts expanded prefixes to depth 28 and currently totals `35044546`.
+
+This is intentionally shaped as a coordinator plus replaceable client kernel. The next step for real 8x8/9x9 volunteer work is to replace the default raw prefix generator with the symmetry-reduced 8x8/9x9 cycle-case generator and use the `cases` payload multiplier support in the WASM worker.

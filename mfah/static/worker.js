@@ -1,6 +1,7 @@
 let cancelled = false;
+let wasmKernelPromise = null;
 
-self.onmessage = (event) => {
+self.onmessage = async (event) => {
   const message = event.data;
   if (message.type === "cancel") {
     cancelled = true;
@@ -9,7 +10,7 @@ self.onmessage = (event) => {
   if (message.type === "work") {
     cancelled = false;
     try {
-      const result = solvePayload(message.payload);
+      const result = await solvePayload(message.payload);
       self.postMessage({ type: "result", ...result });
     } catch (error) {
       self.postMessage({ type: "error", error: String(error && error.message ? error.message : error) });
@@ -17,7 +18,142 @@ self.onmessage = (event) => {
   }
 };
 
-function solvePayload(payload) {
+async function solvePayload(payload) {
+  const kernel = payload.forceJs ? null : await loadWasmKernel();
+  if (kernel && payload.n <= 9) {
+    return solvePayloadWasm(payload, kernel);
+  }
+  return solvePayloadJs(payload);
+}
+
+async function loadWasmKernel() {
+  if (!wasmKernelPromise) {
+    wasmKernelPromise = (async () => {
+      try {
+        const response = await fetch("/static/sym_kernel.wasm");
+        if (!response.ok) {
+          throw new Error(`${response.status} ${response.statusText}`);
+        }
+        const { instance } = await WebAssembly.instantiate(await response.arrayBuffer(), {});
+        const exp = instance.exports;
+        const required = ["memory", "input_ptr", "output_ptr", "case_stride", "max_cases", "solve_cases"];
+        if (!required.every((name) => exp[name])) {
+          throw new Error("sym_kernel.wasm is missing required exports");
+        }
+        return {
+          memory: exp.memory,
+          input: exp.input_ptr(),
+          output: exp.output_ptr(),
+          stride: exp.case_stride(),
+          maxCases: exp.max_cases(),
+          solveCases: exp.solve_cases,
+        };
+      } catch {
+        return null;
+      }
+    })();
+  }
+  return wasmKernelPromise;
+}
+
+function solvePayloadWasm(payload, kernel) {
+  const started = performance.now();
+  const n = payload.n;
+  const n2 = n * n;
+  const depth = payload.depth;
+  const stopDepth = payload.stopDepth || n2;
+  const cases = payloadCases(payload);
+  const total = cases.length;
+  const requestedBatchSize = Number(payload.wasmBatchSize || 16);
+  const batchSize = Math.max(
+    1,
+    Math.min(kernel.maxCases, Number.isFinite(requestedBatchSize) ? requestedBatchSize : 16)
+  );
+  let nodes = 0;
+  let raw = 0n;
+
+  for (let start = 0; start < total; start += batchSize) {
+    if (cancelled) {
+      break;
+    }
+
+    const end = Math.min(total, start + batchSize);
+    writeWasmCases(kernel, cases, start, end, n2);
+    const status = kernel.solveCases(n, depth, stopDepth, end - start);
+    const result = readWasmOutput(kernel);
+    if (status !== 0 || result.status !== 0) {
+      throw new Error(`WASM solver rejected work unit with status ${status}/${result.status}`);
+    }
+    raw += result.count;
+    nodes += result.nodes;
+
+    self.postMessage({
+      type: "progress",
+      done: end,
+      total,
+      nodes,
+      nodesDelta: result.nodes,
+      rawCount: raw.toString(),
+      currentPrefix: Array.from(decodePrefix(cases[start].prefix, n2).slice(0, depth)),
+      kernel: "wasm",
+    });
+  }
+
+  return {
+    rawCount: raw.toString(),
+    nodes,
+    elapsedMs: Math.round(performance.now() - started),
+    cancelled,
+    kernel: "wasm",
+  };
+}
+
+function payloadCases(payload) {
+  if (Array.isArray(payload.cases)) {
+    return payload.cases.map((item) => {
+      if (typeof item === "string") {
+        return { prefix: item, multiplier: 1n };
+      }
+      return {
+        prefix: item.prefix || item.cycle || item.encoded,
+        multiplier: BigInt(item.multiplier || 1),
+      };
+    });
+  }
+  return payload.prefixes.map((prefix) => ({ prefix, multiplier: 1n }));
+}
+
+function writeWasmCases(kernel, cases, start, end, n2) {
+  const memory = new Uint8Array(kernel.memory.buffer);
+  const view = new DataView(kernel.memory.buffer);
+  const count = end - start;
+  memory.fill(0, kernel.input, kernel.input + kernel.stride * count);
+  for (let local = 0; local < count; local += 1) {
+    const item = cases[start + local];
+    const offset = kernel.input + local * kernel.stride;
+    memory.set(decodePrefix(item.prefix, n2), offset);
+    view.setBigUint64(offset + 100, item.multiplier, true);
+  }
+}
+
+function readWasmOutput(kernel) {
+  const view = new DataView(kernel.memory.buffer, kernel.output, 32);
+  const count =
+    BigInt(view.getUint32(0, true)) |
+    (BigInt(view.getUint32(4, true)) << 32n) |
+    (BigInt(view.getUint32(8, true)) << 64n) |
+    (BigInt(view.getUint32(12, true)) << 96n);
+  const nodeCount =
+    BigInt(view.getUint32(16, true)) |
+    (BigInt(view.getUint32(20, true)) << 32n);
+  return {
+    count,
+    nodes: Number(nodeCount),
+    status: view.getUint32(24, true),
+  };
+}
+
+function solvePayloadJs(payload) {
   const started = performance.now();
   const n = payload.n;
   const n2 = n * n;
@@ -66,6 +202,7 @@ function solvePayload(payload) {
     nodes,
     elapsedMs: Math.round(performance.now() - started),
     cancelled,
+    kernel: "js",
   };
 }
 
