@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Map Folding At Home</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">distributed map folding search</p>
+          <h1>Map Folding At Home</h1>
+        </div>
+        <div class="client-card">
+          <label for="displayName">Contributor</label>
+          <input id="displayName" maxlength="80" autocomplete="nickname">
+        </div>
+      </header>
+
+      <section class="summary-grid" aria-label="global folding statistics">
+        <article class="metric primary">
+          <span>Global progress</span>
+          <strong id="globalProgress">0.00%</strong>
+          <div class="bar"><span id="globalBar"></span></div>
+        </article>
+        <article class="metric">
+          <span>Completed units</span>
+          <strong id="unitCount">0 / 0</strong>
+        </article>
+        <article class="metric">
+          <span>Active contributors</span>
+          <strong id="activeClients">0</strong>
+        </article>
+        <article class="metric">
+          <span>Current answer sum</span>
+          <strong id="answerCompleted">0</strong>
+        </article>
+      </section>
+
+      <section class="workbench">
+        <div class="panel control-panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">local worker</p>
+              <h2>Compute</h2>
+            </div>
+            <span id="connectionState" class="pill idle">idle</span>
+          </div>
+
+          <div class="controls">
+            <button id="startButton" class="command primary-command" type="button">Start folding</button>
+            <button id="pauseButton" class="command" type="button" disabled>Pause</button>
+            <label class="select-label" for="threadCount">Workers</label>
+            <select id="threadCount"></select>
+          </div>
+
+          <dl class="stat-list">
+            <div>
+              <dt>Your units</dt>
+              <dd id="personalUnits">0</dd>
+            </div>
+            <div>
+              <dt>Your CPU time</dt>
+              <dd id="personalTime">0s</dd>
+            </div>
+            <div>
+              <dt>Search nodes</dt>
+              <dd id="personalNodes">0</dd>
+            </div>
+            <div>
+              <dt>Session rate</dt>
+              <dd id="sessionRate">0 units/min</dd>
+            </div>
+          </dl>
+
+          <div class="current-work">
+            <div>
+              <span>Current unit</span>
+              <strong id="currentUnit">waiting</strong>
+            </div>
+            <div>
+              <span>Prefix progress</span>
+              <strong id="prefixProgress">0 / 0</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel visual-panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">live prefix</p>
+              <h2>Fold trace</h2>
+            </div>
+            <span id="campaignLabel" class="pill">n=?</span>
+          </div>
+          <canvas id="foldCanvas" width="720" height="520"></canvas>
+        </div>
+      </section>
+
+      <section class="details-grid">
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">campaign</p>
+              <h2>Coordinator</h2>
+            </div>
+          </div>
+          <dl class="stat-list compact">
+            <div>
+              <dt>Grid</dt>
+              <dd id="gridSize">-</dd>
+            </div>
+            <div>
+              <dt>Prefix depth</dt>
+              <dd id="prefixDepth">-</dd>
+            </div>
+            <div>
+              <dt>Total prefixes</dt>
+              <dd id="totalPrefixes">0</dd>
+            </div>
+            <div>
+              <dt>Known full answer</dt>
+              <dd id="knownAnswer">-</dd>
+            </div>
+          </dl>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">recent work</p>
+              <h2>Local log</h2>
+            </div>
+          </div>
+          <ol id="recentLog" class="recent-log"></ol>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="{{ url_for('static', filename='app.js') }}"></script>
+  </body>
+</html>

@@ -53,6 +53,8 @@ gpu_folding_remote
 gpu_v2_*
 gpu_old_*
 results/
+mfah/*.sqlite3
+mfah/*.sqlite3-*
 
 # Kernel Module Compile Results
 *.mod*
